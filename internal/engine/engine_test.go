@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -23,6 +24,7 @@ import (
 )
 
 type fakePlat struct {
+	traces  []string
 	mu      sync.Mutex
 	p5      map[string]string // action id -> result
 	nextP5  string            // result of the next proposal
@@ -85,8 +87,9 @@ func (f *fakePlat) Job(_ context.Context, t string) (heain.JobStatus, error) {
 func (f *fakePlat) ConfirmRetrieval(context.Context, string) error { return nil }
 func (f *fakePlat) SignDigest(d []byte) ([]byte, error)            { return ecdsa.SignASN1(rand.Reader, f.key, d) }
 func (f *fakePlat) CertDER() []byte                                { return []byte("cert") }
-func (f *fakePlat) Audit(context.Context, string, string, map[string]any) error {
+func (f *fakePlat) Audit(ctx context.Context, _, _ string, d map[string]any) error {
 	f.mu.Lock()
+	f.traces = append(f.traces, heain.TraceID(ctx)+"|"+fmt.Sprint(d["cause_trace"]))
 	f.auditN++
 	f.mu.Unlock()
 	return nil
@@ -364,5 +367,16 @@ func TestVersionsKeepRunning(t *testing.T) {
 	rec, _ := v.e.Store.Def("purchase")
 	if rec.Versions[0].State != "retired" {
 		t.Fatalf("v1 retired: %+v", rec.Versions[0])
+	}
+}
+
+// An engine event made during a served call gets its own trace: the call
+// already has exactly one formal record (spec 05 C5).
+func TestAuditOwnTrace(t *testing.T) {
+	v := setup(t)
+	v.e.audit(heain.WithTrace(context.Background(), "req-trace", ""), "workflow.run", "started", nil)
+	tr, cause, _ := strings.Cut(v.p.traces[len(v.p.traces)-1], "|")
+	if tr == "" || tr == "req-trace" || cause != "req-trace" {
+		t.Fatalf("trace %q cause %q", tr, cause)
 	}
 }
