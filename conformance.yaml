@@ -1,0 +1,20 @@
+# heain-workflow under the heain conformance suite (heain-sdk conformance/). The suite's probe app is an
+# admin caller (-admin-callers conformance-probe): it submits a definition, which waits for P5 there, so
+# nothing is started; tasks are for people (through heain-gateway) and refuse an app. scripts/live_4_6c.sh
+# runs whole processes with heain-gateway, heain-notify and a step app.
+manifest: heain-app.yaml
+build: [go, build, -o, heain-workflow, ./cmd/heain-workflow]
+start: [./heain-workflow, -admin-callers, conformance-probe]
+port: 19530
+endpoints:
+  - {method: PUT, path: /v1/definitions/conf-wf, body: {source: "id: conf-wf\ntitle: conformance-secret-title\nstart: {apps: [conformance-probe]}\nfirst: done\nsteps:\n  - {id: done, type: end, status: completed}\n"}, expect: 202, secret: conformance-secret-title}
+  - {method: GET, path: /v1/definitions, expect: 200}
+  - {method: GET, path: /v1/definitions/conf-wf, expect: 200}
+  - {method: GET, path: /v1/workflows, expect: 200}
+  - {method: POST, path: /v1/workflows/conf-wf/instances, body: {vars: {}}, expect: 404}
+  - {method: GET, path: /v1/instances, expect: 200}
+  - {method: GET, path: /v1/instances/unknown, expect: 404}
+  - {method: POST, path: /v1/instances/unknown/cancel, expect: 409}
+  - {method: GET, path: /v1/tasks, expect: 403}
+  - {method: POST, path: /v1/tasks/unknown/claim, expect: 403}
+  - {method: POST, path: /v1/tasks/unknown/complete, body: {outcome: ok}, expect: 403}

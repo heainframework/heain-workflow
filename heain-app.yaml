@@ -1,0 +1,39 @@
+# heain-workflow v1 (Step 4.6c, 2026-10-07): multi-step business processes with people in them.
+# Definitions (YAML/JSON state machines, versioned) are activated through P5; a running instance
+# keeps its version. Steps: people's tasks (through heain-gateway, notices through heain-notify),
+# core's Approver (P5), apps that open a capability to workflows (*.step), core jobs, signed
+# webhooks, heain-notify messages, timers, switches; deadlines; scheduled starts. Each instance's
+# data is sealed under its own key in heain-core's KMS.
+manifest_version: 1
+app:
+  id: heain-workflow
+  version: 1.0.0
+  group: base
+  description: Business processes -- tasks for people, P5 approvals, app and job steps, webhooks, notifications, timers and schedules.
+  api: v1
+  sdk: {name: heain-sdk-go, version: ">=1.0.0"}
+capabilities:
+  - {name: workflow.define, version: 1, formal: true, execution: direct, ai: {used: false}}
+  - {name: workflow.run, version: 1, formal: true, execution: direct, ai: {used: false}, data_classes: [workflow_data]}
+  - {name: workflow.task, version: 1, formal: true, execution: direct, ai: {used: false}, data_classes: [workflow_data]}
+endpoints:
+  - {method: PUT, path: "/v1/definitions/{id}", capability: workflow.define, formal: true, public: true}
+  - {method: GET, path: /v1/definitions, capability: workflow.define, formal: false, public: true}
+  - {method: GET, path: "/v1/definitions/{id}", capability: workflow.define, formal: false, public: true}
+  - {method: GET, path: /v1/workflows, capability: workflow.run, formal: false, public: true}
+  - {method: POST, path: "/v1/workflows/{id}/instances", capability: workflow.run, formal: true, public: true}
+  - {method: GET, path: /v1/instances, capability: workflow.run, formal: false, public: true}
+  - {method: GET, path: "/v1/instances/{id}", capability: workflow.run, formal: true, public: true}
+  - {method: POST, path: "/v1/instances/{id}/cancel", capability: workflow.run, formal: true, public: true}
+  - {method: GET, path: /v1/tasks, capability: workflow.task, formal: false, public: true}
+  - {method: POST, path: "/v1/tasks/{id}/claim", capability: workflow.task, formal: true, public: true}
+  - {method: POST, path: "/v1/tasks/{id}/complete", capability: workflow.task, formal: true, public: true}
+uses:
+  - {app: heain-notify, capabilities: [notify.send]}
+  # any app that opens a capability to workflows (*.step), and heain-job's orchestration for job steps
+  - {app: "*", capabilities: ["*.step", job.orchestrate]}
+data_classes:
+  - {name: workflow_data, sovereignty: node-local, encrypted_at_rest: true, crypto_shred: true}
+offline:
+  allowed: [workflow.run, workflow.task]
+  journal: none
